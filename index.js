@@ -1,6 +1,6 @@
 const app = require('express')()
-const { init, getLocation, getDetails } = require("./lib");
-
+const { init, getLocation, getDetails, getPostcodeByLatLng } = require("./lib");
+const { getLong, getShort, array_unique } = require('./lib/helper');
 const port = 3000
 
 init('YourAPIKey')
@@ -15,12 +15,31 @@ async function get(input) {
     const place = await getLocation({
         query: input
     })
-    
-    for (var i = 0; i < place.results?.length; i++) {
-        place_details[i] = await getDetails(place.results[i].place_id);
+
+    try {
+        for (var i = 0; i < place.results?.length; i++) {
+            try {
+                const res = await getPostcodeByLatLng(place.results[i].geometry.location.lat, place.results[i].geometry.location.lng);
+                const results = res?.results || []
+                const addresses = []
+                results.forEach(e => {
+                    const city = getLong(e.address_components, 'administrative_area_level_2')
+                    const state = getShort(e.address_components, 'administrative_area_level_1')
+                    const postalcode = getLong(e.address_components, 'postal_code');
+                    if (city && state && postalcode)
+                        addresses.push(`${city}, ${state} - ${postalcode}`)
+                });
+
+                place_details.push(...array_unique(addresses))
+            } catch (error) {
+                console.log('error at 35',error);
+            }
+        }
+    } catch (error) {
+        console.log('error at 39', error);
     }
 
-    return place_details;
+    return array_unique(place_details).sort()
 }
 
 app.get('/', async (req, res) => {
